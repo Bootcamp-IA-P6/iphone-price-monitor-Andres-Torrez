@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 📱 iPhone Price Monitor
 
 A modular, documented and reproducible web scraping project that monitors iPhone prices over time and generates a visual HTML dashboard.
@@ -177,3 +178,5 @@ See the GitHub Project board for step-by-step development progress.
 ## 🐳 Docker & Automation (later steps)
 
 The project will be dockerized and scheduled via cron or GitHub Actions.
+=======
+>>>>>>> 0af7798 (chore: scaffold project structure with uv)

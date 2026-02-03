@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.uv/
+dist/
+build/
+*.egg-info/
+data/raw/
+data/processed/*.parquet
+reports/*.html
+assets/images/
+.DS_Store
