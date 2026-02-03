@@ -21,16 +21,56 @@ https://andres-torrez.github.io/iphone-catalog/
 
 ---
 
-## 🧱 Project Structure
+## 🗂️ Project Structure
 
 ```
-scraper/        → scraping logic and pipeline
-data/           → csv/json/parquet historical data
-reports/        → generated HTML dashboard
-assets/         → downloaded product images and docs
-tests/          → pytest tests
-.github/        → CI and automation
+iphone-price-monitor/
+│
+├── scraper/                     # Core application
+│   ├── cli.py                   # Entry point (commands)
+│   ├── config.py                # Global configuration
+│   ├── models.py                # Data models (Pydantic)
+│   ├── http_client.py          # HTTP utilities
+│   │
+│   ├── sources/                # Website adapters (scrapers)
+│   │   ├── base.py
+│   │   └── github_pages_catalog.py
+│   │
+│   ├── pipeline/               # Data processing pipeline
+│   │   ├── run.py
+│   │   ├── normalize.py
+│   │   └── dedupe.py
+│   │
+│   ├── storage/                # Data persistence
+│   │   ├── csv_store.py
+│   │   └── json_store.py
+│   │
+│   ├── media/                  # Image download logic
+│   │   └── images.py
+│   │
+│   └── report/                 # HTML generation
+│       ├── render.py
+│       └── templates/
+│           └── index.html.j2
+│
+├── data/
+│   ├── raw/                    # Raw responses (optional)
+│   └── processed/              # CSV / JSON history
+│
+├── reports/                    # Generated HTML dashboard
+│
+├── assets/
+│   ├── images/                 # Downloaded product images
+│   └── docs/                   # Screenshots and diagrams
+│
+├── tests/                      # Pytest tests
+│
+├── .github/workflows/          # CI and scheduled runs
+│
+├── pyproject.toml              # Project definition (uv)
+└── README.md
 ```
+
 
 ---
 
@@ -43,6 +83,42 @@ Install uv:
 https://docs.astral.sh/uv/
 
 ---
+
+## 🐍 Virtual Environment with uv (no manual activation)
+
+This project uses **uv** instead of pip and venv.
+
+You do **not** activate a virtual environment manually.
+
+uv automatically creates and manages an isolated environment for the project.
+
+### First time setup
+
+```bash
+uv init
+uv python pin 3.12
+uv add httpx selectolax pydantic jinja2
+uv add --dev pytest ruff
+```
+
+### Running commands
+
+Always use:
+
+```bash
+uv run <command>
+```
+
+Examples:
+
+```bash
+uv run python -m scraper.cli healthcheck
+uv run ruff check .
+uv run pytest
+```
+
+uv ensures all commands run inside the project environment automatically.
+
 
 ## 🚀 Installation
 
