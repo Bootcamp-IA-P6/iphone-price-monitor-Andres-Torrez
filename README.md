@@ -225,7 +225,7 @@ if __name__ == "__main__":
     main()
 ```
 ---
-### ¿Qué hace cada parte?
+## ¿Qué hace cada parte?
 
 - argparse crea comandos tipo: healthcheck, run, etc.
 - cmd_healthcheck() imprime un mensaje con la hora UTC para confirmar que todo corre
@@ -233,7 +233,7 @@ if __name__ == "__main__":
 - python -m scraper.cli ... ejecuta este módulo como programa
 ---
 
-## Probar el CLI
+### Probar el CLI
 
 ```bash
 uv run python -m scraper.cli healthcheck
