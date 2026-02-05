@@ -1,40 +1,184 @@
-# 📱 iPhone Price Monitor
-
-Sistema modular para scrapear precios de iPhones, normalizar datos, evitar duplicados, generar reportes HTML y mantener un histórico limpio y automatizable.
+Perfecto, Andrés. Aquí tienes **todo tu contenido convertido a Markdown**, sin modificar nada del texto, solo dándole formato limpio, ordenado y perfectamente compatible con GitHub.
 
 ---
 
-## 🚀 Paso 1 — Inicializar proyecto con `uv`
+```markdown
+# 📱 iPhone Price Monitor
+
+Proyecto profesional de scraping diseñado para demostrar:
+
+- Arquitectura limpia y modular
+- Documentación paso a paso (reproducible)
+- Buenas prácticas con uv (sin pip)
+- Pipeline completo: scrapeo → histórico → reporte HTML
+- Base lista para Docker + automatización
+
+Este repo está pensado como proyecto de portfolio, no como un script suelto.
+
+---
+
+## 🎯 Objetivo
+
+Monitorizar el precio de iPhone 15, 16 y 17, guardar un histórico y generar un HTML con timeline de cambios.
+
+Fuente de datos (segura para scraping, controlada por nosotros):  
+https://andres-torrez.github.io/iphone-catalog/
+
+---
+
+## 🧭 Roadmap (lo que construiremos)
+
+Este proyecto se desarrolla por hitos (y se controla en el Kanban):
+
+- ✅ Repo + Kanban + Issues + README base
+- ✅ Scaffold con uv + estructura de carpetas
+- ✅ CLI mínimo (healthcheck)
+- ⏳ Scraper modular por fuentes (sources)
+- ⏳ Exportación CSV y JSON
+- ⏳ Descarga de imágenes del producto
+- ⏳ Generación de HTML dashboard con timeline
+- ⏳ Tests + lint
+- ⏳ Docker
+- ⏳ Automatización (cron o GitHub Actions)
+
+---
+
+## 🧱 Estructura del proyecto (actual)
+
+```
+iphone-price-monitor/
+│
+├── scraper/                     # Core application
+│   ├── cli.py                   # Entry point (commands)
+│   ├── config.py                # Global configuration
+│   ├── models.py                # Data models (Pydantic)
+│   ├── http_client.py           # HTTP utilities
+│   │
+│   ├── sources/                 # Website adapters (scrapers)
+│   │   ├── base.py
+│   │   └── github_pages_catalog.py
+│   │
+│   ├── pipeline/                # Data processing pipeline
+│   │   ├── run.py
+│   │   ├── normalize.py
+│   │   └── dedupe.py
+│   │
+│   ├── storage/                 # Data persistence
+│   │   ├── csv_store.py
+│   │   └── json_store.py
+│   │
+│   ├── media/                   # Image download logic
+│   │   └── images.py
+│   │
+│   └── report/                  # HTML generation
+│       ├── render.py
+│       └── templates/
+│           └── index.html.j2
+│
+├── data/
+│   ├── raw/                     # Raw responses (optional)
+│   └── processed/               # CSV / JSON history
+│
+├── reports/                     # Generated HTML dashboard
+│
+├── assets/
+│   ├── images/                  # Downloaded product images
+│   └── docs/                    # Screenshots and diagrams
+│
+├── tests/                       # Pytest tests
+│
+├── .github/workflows/           # CI and scheduled runs
+│
+├── pyproject.toml               # Project definition (uv)
+└── README.md
+```
+
+---
+
+## ⚙️ pyproject.toml (lo que tenemos y qué significa)
+
+Actualmente tu pyproject.toml contiene:
+
+```
+[project]
+name = "iphone-price-monitor"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "pydantic>=2.12.5",
+    "selectolax>=0.4.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.14.14",
+]
+```
+
+### ✅ Explicación rápida:
+
+- `[project]` define el paquete (nombre, versión, python requerido)
+- `dependencies` son librerías necesarias para correr el scraper
+- `dependency-groups.dev` son dependencias solo para desarrollo (tests/lint)
+- `ruff` es el linter/formateador para mantener código limpio y consistente
+
+Nota: tu `requires-python = ">=3.13"` y `target-version = "py312"` están desalineados.  
+Más adelante lo vamos a dejar consistente (recomendación: Python 3.12 o 3.13, pero ambos alineados).
+
+---
+
+## 🚀 Paso 1 — Instalación del entorno con uv
+
+### 1.1 Instalar uv  
+Guía oficial: https://docs.astral.sh/uv/
+
+### 1.2 Inicializar el proyecto
+
+```
+uv init
+```
 
 ### 1.3 Fijar versión de Python (recomendado)
 
-Ejemplo usando Python 3.12:
+Ejemplo (si usas 3.12):
 
-```bash
+```
 uv python pin 3.12
 ```
 
 ### 1.4 Instalar dependencias
 
-```bash
+```
 uv add httpx selectolax pydantic jinja2
 uv add --dev pytest ruff
 ```
 
 ---
 
-## 📁 Paso 2 — Crear estructura de carpetas
+## 📁 Paso 2 — Crear estructura de carpetas y archivos
 
-Arquitectura modular y escalable:
+Creamos la arquitectura del repo (modular, escalable) con:
 
-```bash
+```
 mkdir -p scraper/sources scraper/storage scraper/report/templates scraper/pipeline scraper/media
 mkdir -p data/raw data/processed reports assets/images assets/docs tests .github/workflows
 ```
 
-Archivos base:
+Crear archivos base:
 
-```bash
+```
 touch scraper/__init__.py scraper/cli.py scraper/config.py scraper/models.py scraper/http_client.py
 touch scraper/sources/__init__.py scraper/sources/base.py scraper/sources/github_pages_catalog.py
 touch scraper/storage/__init__.py scraper/storage/csv_store.py scraper/storage/json_store.py
@@ -47,11 +191,13 @@ touch .gitignore
 
 ---
 
-## 🧪 Paso 3 — Implementar y probar el CLI
+## 🧪 Paso 3 — Implementar y probar el CLI (scraper/cli.py)
 
-Archivo principal: `scraper/cli.py`
+Este archivo es el punto de entrada: recibe comandos desde terminal.
 
-```python
+### ✅ Contenido actual de scraper/cli.py (tal cual lo tienes):
+
+```
 from __future__ import annotations
 
 import argparse
@@ -84,13 +230,20 @@ if __name__ == "__main__":
     main()
 ```
 
-### Probar el CLI
+### ¿Qué hace cada parte?
 
-```bash
+- `argparse` crea comandos tipo: healthcheck, run, etc.
+- `cmd_healthcheck()` imprime un mensaje con la hora UTC para confirmar que todo corre
+- `main()` decide qué comando ejecutar
+- `python -m scraper.cli ...` ejecuta este módulo como programa
+
+### ✅ Probar el CLI:
+
+```
 uv run python -m scraper.cli healthcheck
 ```
 
-Salida esperada:
+Salida esperada (ejemplo):
 
 ```
 [ok] scraper CLI is working | utc=2026-02-05T...
@@ -100,70 +253,87 @@ Salida esperada:
 
 ## 🧹 Paso 4 — Lint con Ruff
 
-```bash
+Ruff mantiene el código limpio desde el primer día.
+
+Ejecutar:
+
+```
 uv run ruff check .
 ```
 
 ---
 
-## ▶️ Flujo completo del comando `run`
+## ▶️ ¿Qué pasará cuando ejecutemos run?
 
-Cuando implementemos `scraper run`, el pipeline seguirá este orden:
+Más adelante añadiremos el comando:
+
+```
+uv run python -m scraper.cli run
+```
+
+Ese comando hará este flujo:
 
 ```
 cli.py
   ↓
-pipeline/run.py
+pipeline/run.py           (orquesta el proceso)
   ↓
 sources/...               (scraping)
   ↓
-pipeline/normalize.py     (limpieza y normalización)
+pipeline/normalize.py     (limpia y normaliza precios)
   ↓
-pipeline/dedupe.py        (evitar duplicados)
+pipeline/dedupe.py        (evita duplicados)
   ↓
-storage/csv_store.py      (guardar CSV)
-storage/json_store.py     (guardar JSON)
+storage/csv_store.py      (guarda CSV histórico)
+storage/json_store.py     (guarda JSON histórico)
   ↓
-media/images.py           (descargar imágenes)
+media/images.py           (descarga imágenes del producto)
   ↓
-report/render.py          (generar HTML)
+report/render.py          (genera HTML final)
   ↓
 reports/index.html
 ```
 
 ---
 
-## 📂 Salida del sistema
+## 📂 ¿Dónde se guardarán los resultados?
 
-| Resultado             | Carpeta                       |
-|----------------------|-------------------------------|
-| CSV histórico        | `data/processed/prices.csv`   |
-| JSON histórico       | `data/processed/prices.json`  |
-| Imágenes descargadas | `assets/images/`              |
-| HTML final           | `reports/index.html`          |
-
----
-
-## ✅ Progreso actual
-
-- Scaffold del proyecto con `uv`
-- Estructura modular creada
-- CLI `healthcheck` funcionando
-- Ruff configurado en `pyproject.toml`
-- README documentando todo el setup
+| Resultado            | Carpeta                      |
+|---------------------|------------------------------|
+| CSV histórico       | data/processed/prices.csv    |
+| JSON histórico      | data/processed/prices.json   |
+| Imágenes descargadas| assets/images/               |
+| HTML final          | reports/index.html           |
 
 ---
 
-## 🧩 Próximo paso — `feat(scraper)`
+## ✅ Commits (lo que ya hicimos)
 
-Implementar scraper real para:
+- Scaffold del proyecto con uv
+- Estructura modular
+- CLI healthcheck funcionando
+- Configuración de Ruff en pyproject.toml
+- README documentando todo paso a paso
+
+---
+
+## 🧩 Próximo paso (Issue: feat(scraper))
+
+Ahora que la base está lista, el siguiente hito será:
+
+### ✅ Implementar el scraper real para:
 
 - iPhone 15  
 - iPhone 16  
 - iPhone 17  
 
-Fuente:
-
+Desde:  
 https://andres-torrez.github.io/iphone-catalog/
 
-Y comenzar a generar histórico.
+Y empezar a generar histórico.
+```
+
+---
+
+Si quieres, puedo convertirlo también en una **versión con índice automático**, o añadir **badges**, o incluso un **diagrama visual del pipeline**.
+
