@@ -1,17 +1,12 @@
-Perfecto, Andrés. Aquí tienes **todo tu contenido convertido a Markdown**, sin modificar nada del texto, solo dándole formato limpio, ordenado y perfectamente compatible con GitHub.
-
----
-
-```markdown
 # 📱 iPhone Price Monitor
 
 Proyecto profesional de scraping diseñado para demostrar:
 
-- Arquitectura limpia y modular
-- Documentación paso a paso (reproducible)
-- Buenas prácticas con uv (sin pip)
-- Pipeline completo: scrapeo → histórico → reporte HTML
-- Base lista para Docker + automatización
+- Arquitectura limpia y modular  
+- Documentación paso a paso (reproducible)  
+- Buenas prácticas con uv (sin pip)  
+- Pipeline completo: scrapeo → histórico → reporte HTML  
+- Base lista para Docker + automatización  
 
 Este repo está pensado como proyecto de portfolio, no como un script suelto.
 
@@ -30,22 +25,22 @@ https://andres-torrez.github.io/iphone-catalog/
 
 Este proyecto se desarrolla por hitos (y se controla en el Kanban):
 
-- ✅ Repo + Kanban + Issues + README base
-- ✅ Scaffold con uv + estructura de carpetas
-- ✅ CLI mínimo (healthcheck)
-- ⏳ Scraper modular por fuentes (sources)
-- ⏳ Exportación CSV y JSON
-- ⏳ Descarga de imágenes del producto
-- ⏳ Generación de HTML dashboard con timeline
-- ⏳ Tests + lint
-- ⏳ Docker
+- ✅ Repo + Kanban + Issues + README base  
+- ✅ Scaffold con uv + estructura de carpetas  
+- ✅ CLI mínimo (healthcheck)  
+- ⏳ Scraper modular por fuentes (sources)  
+- ⏳ Exportación CSV y JSON  
+- ⏳ Descarga de imágenes del producto  
+- ⏳ Generación de HTML dashboard con timeline  
+- ⏳ Tests + lint  
+- ⏳ Docker  
 - ⏳ Automatización (cron o GitHub Actions)
 
 ---
 
 ## 🧱 Estructura del proyecto (actual)
 
-```
+```text
 iphone-price-monitor/
 │
 ├── scraper/                     # Core application
@@ -99,7 +94,7 @@ iphone-price-monitor/
 
 Actualmente tu pyproject.toml contiene:
 
-```
+```toml
 [project]
 name = "iphone-price-monitor"
 version = "0.1.0"
@@ -127,12 +122,12 @@ dev = [
 ]
 ```
 
-### ✅ Explicación rápida:
+### ✅ Explicación rápida
 
-- `[project]` define el paquete (nombre, versión, python requerido)
-- `dependencies` son librerías necesarias para correr el scraper
-- `dependency-groups.dev` son dependencias solo para desarrollo (tests/lint)
-- `ruff` es el linter/formateador para mantener código limpio y consistente
+- `[project]` define el paquete (nombre, versión, python requerido)  
+- `dependencies` son librerías necesarias para correr el scraper  
+- `dependency-groups.dev` son dependencias solo para desarrollo (tests/lint)  
+- `ruff` es el linter/formateador para mantener código limpio y consistente  
 
 Nota: tu `requires-python = ">=3.13"` y `target-version = "py312"` están desalineados.  
 Más adelante lo vamos a dejar consistente (recomendación: Python 3.12 o 3.13, pero ambos alineados).
@@ -146,7 +141,7 @@ Guía oficial: https://docs.astral.sh/uv/
 
 ### 1.2 Inicializar el proyecto
 
-```
+```bash
 uv init
 ```
 
@@ -154,13 +149,13 @@ uv init
 
 Ejemplo (si usas 3.12):
 
-```
+```bash
 uv python pin 3.12
 ```
 
 ### 1.4 Instalar dependencias
 
-```
+```bash
 uv add httpx selectolax pydantic jinja2
 uv add --dev pytest ruff
 ```
@@ -171,14 +166,14 @@ uv add --dev pytest ruff
 
 Creamos la arquitectura del repo (modular, escalable) con:
 
-```
+```bash
 mkdir -p scraper/sources scraper/storage scraper/report/templates scraper/pipeline scraper/media
 mkdir -p data/raw data/processed reports assets/images assets/docs tests .github/workflows
 ```
 
 Crear archivos base:
 
-```
+```bash
 touch scraper/__init__.py scraper/cli.py scraper/config.py scraper/models.py scraper/http_client.py
 touch scraper/sources/__init__.py scraper/sources/base.py scraper/sources/github_pages_catalog.py
 touch scraper/storage/__init__.py scraper/storage/csv_store.py scraper/storage/json_store.py
@@ -195,9 +190,9 @@ touch .gitignore
 
 Este archivo es el punto de entrada: recibe comandos desde terminal.
 
-### ✅ Contenido actual de scraper/cli.py (tal cual lo tienes):
+### ✅ Contenido actual de scraper/cli.py (tal cual lo tienes)
 
-```
+```python
 from __future__ import annotations
 
 import argparse
@@ -230,20 +225,13 @@ if __name__ == "__main__":
     main()
 ```
 
-### ¿Qué hace cada parte?
+### Probar el CLI
 
-- `argparse` crea comandos tipo: healthcheck, run, etc.
-- `cmd_healthcheck()` imprime un mensaje con la hora UTC para confirmar que todo corre
-- `main()` decide qué comando ejecutar
-- `python -m scraper.cli ...` ejecuta este módulo como programa
-
-### ✅ Probar el CLI:
-
-```
+```bash
 uv run python -m scraper.cli healthcheck
 ```
 
-Salida esperada (ejemplo):
+Salida esperada:
 
 ```
 [ok] scraper CLI is working | utc=2026-02-05T...
@@ -253,11 +241,7 @@ Salida esperada (ejemplo):
 
 ## 🧹 Paso 4 — Lint con Ruff
 
-Ruff mantiene el código limpio desde el primer día.
-
-Ejecutar:
-
-```
+```bash
 uv run ruff check .
 ```
 
@@ -267,7 +251,7 @@ uv run ruff check .
 
 Más adelante añadiremos el comando:
 
-```
+```bash
 uv run python -m scraper.cli run
 ```
 
@@ -309,11 +293,11 @@ reports/index.html
 
 ## ✅ Commits (lo que ya hicimos)
 
-- Scaffold del proyecto con uv
-- Estructura modular
-- CLI healthcheck funcionando
-- Configuración de Ruff en pyproject.toml
-- README documentando todo paso a paso
+- Scaffold del proyecto con uv  
+- Estructura modular  
+- CLI healthcheck funcionando  
+- Configuración de Ruff en pyproject.toml  
+- README documentando todo paso a paso  
 
 ---
 
@@ -321,7 +305,7 @@ reports/index.html
 
 Ahora que la base está lista, el siguiente hito será:
 
-### ✅ Implementar el scraper real para:
+### Implementar el scraper real para:
 
 - iPhone 15  
 - iPhone 16  
@@ -330,10 +314,6 @@ Ahora que la base está lista, el siguiente hito será:
 Desde:  
 https://andres-torrez.github.io/iphone-catalog/
 
-Y empezar a generar histórico.
-```
-
 ---
 
-Si quieres, puedo convertirlo también en una **versión con índice automático**, o añadir **badges**, o incluso un **diagrama visual del pipeline**.
-
+Si quieres, puedo dejarlo con índice automático, badges, o incluso un diseño más visual.
