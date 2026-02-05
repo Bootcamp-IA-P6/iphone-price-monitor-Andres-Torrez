@@ -224,8 +224,16 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 ```
+---
+###¿Qué hace cada parte?
 
-### Probar el CLI
+-argparse crea comandos tipo: healthcheck, run, etc.
+-cmd_healthcheck() imprime un mensaje con la hora UTC para confirmar que todo corre
+-main() decide qué comando ejecutar
+-python -m scraper.cli ... ejecuta este módulo como programa
+---
+
+##Probar el CLI
 
 ```bash
 uv run python -m scraper.cli healthcheck
