@@ -1,36 +1,56 @@
-# 🟦 Step 3 — Implement the real scraper and persist historical data
+---
+
+# 🟦 Step 3 — Implement the real scraper and persist historical data (Issue #4)
 
 ## 🎯 Goal
 
-The goal of this step is to build a real, modular, and reproducible scraper that:
+In this step, we transform the project from a scaffold into a **real, modular, reproducible data pipeline**.
 
-- Scrapes product data from a scraping-safe website  
-  https://andres-torrez.github.io/iphone-catalog/
-- Monitors the following models:
+The scraper now:
+
+- Collects product information from a scraping‑safe website  
+  👉 https://andres-torrez.github.io/iphone-catalog/
+- Monitors:
   - iPhone 15  
   - iPhone 16  
   - iPhone 17
-- Extracts structured data:
+- Extracts structured fields:
   - product title  
   - model identifier  
   - price (EUR)  
   - SKU  
   - product URL  
-  - direct product image URL
+  - direct image URL
 - Normalizes European price formats
-- Maintains a historical price dataset
+- Maintains a **historical dataset**
 - Exports data to:
-  - JSON (source of truth)
-  - CSV (Excel / Sheets friendly)
-- Includes automated tests to guarantee data quality
+  - JSON → source of truth  
+  - CSV → Excel / Google Sheets friendly
+- Introduces automated tests for data integrity
 
-At the end of this step, the project transitions from a demo to a production‑ready data pipeline.
+### ✅ After this step, the project becomes production‑style rather than a demo.
+
+---
+
+## 🧠 Architecture introduced
+
+```
+HTML Source
+↓
+Normalization
+↓
+Deduplication
+↓
+JSON / CSV Storage
+```
+
+Each responsibility is isolated, testable, and replaceable.
 
 ---
 
 ## ⚙️ Project configuration
 
-To support local development, testing, and reproducibility, the following configuration was added to `pyproject.toml`:
+To support reproducibility and development tooling, we added the following to `pyproject.toml`:
 
 ```toml
 [project.optional-dependencies]
@@ -44,23 +64,25 @@ build-backend = "setuptools.build_meta"
 packages = ["scraper"]
 ```
 
-### Why this configuration?
+### Why this matters
 
 - Defines explicit development dependencies  
-- Enables editable installs for local development  
-- Ensures the scraper package is correctly discoverable  
-- Improves portability and reuse of the project  
+- Enables editable installs  
+- Makes the package importable  
+- Improves portability for other developers  
 
 ---
 
-## 📦 Installation and execution
+## 📦 Installation & execution
+
+Install dependencies:
 
 ```bash
 uv sync
 uv pip install -e .
 ```
 
-Run the full pipeline:
+Run the pipeline:
 
 ```bash
 uv run python -m scraper.cli run
@@ -74,39 +96,20 @@ uv run pytest -q
 
 ---
 
-## 🧠 Architecture introduced in Step 3
+## 📂 Files introduced in Step 3
 
-```
-HTML Source
-   ↓
-Normalization
-   ↓
-Deduplication
-   ↓
-JSON / CSV Storage
-```
+Each file below includes:
 
-Each responsibility is isolated and testable.
+- Purpose  
+- Path  
+- Code (unchanged)
 
 ---
 
-# 📂 Files and Code (Step 3)
-
-Below is each numbered file, with:
-
-- **Correct file path**  
-- **Accurate Purpose summary**  
-- **Your original code untouched**
-
----
-
-## 1) `scraper/storage/csv_store.py`
+# 1) `scraper/storage/csv_store.py`
 
 **Purpose:**  
-Writes the historical dataset to CSV using a fixed column schema. Ensures reproducible, Excel‑friendly exports.
-
-**Path:**  
-`scraper/storage/csv_store.py`
+Exports historical data using a fixed schema, making results stable and spreadsheet‑friendly.
 
 ```python
 from __future__ import annotations
@@ -141,13 +144,10 @@ def write_csv(path: Path, rows: list[ProductSnapshot]) -> None:
 
 ---
 
-## 2) `scraper/http_client.py`
+# 2) `scraper/http_client.py`
 
 **Purpose:**  
-Provides a stable HTTP client for downloading HTML pages with a custom User‑Agent and timeout.
-
-**Path:**  
-`scraper/http_client.py`
+Provides controlled, reproducible HTML downloads with headers and timeout.
 
 ```python
 from __future__ import annotations
@@ -166,13 +166,10 @@ def get_html(url: str, timeout_s: float = 20.0) -> str:
 
 ---
 
-## 3) `scraper/pipeline/dedupe.py`
+# 3) `scraper/pipeline/dedupe.py`
 
 **Purpose:**  
-Removes duplicate snapshots based on `(timestamp, source, model, price_eur)` and returns a stable, sorted list.
-
-**Path:**  
-`scraper/pipeline/dedupe.py`
+Removes duplicate entries based on (timestamp, source, model, price).
 
 ```python
 from __future__ import annotations
@@ -193,20 +190,20 @@ def dedupe_snapshots(rows: list[ProductSnapshot]) -> list[ProductSnapshot]:
         seen.add(key)
         out.append(r)
 
-    # stable sort by timestamp then model
     out.sort(key=lambda x: (x.timestamp, x.model))
     return out
 ```
 
 ---
 
-## 4) `scraper/pipeline/run.py`
+# 4) `scraper/pipeline/run.py`
 
 **Purpose:**  
-Runs the full pipeline: fetch → merge with history → dedupe → write JSON + CSV.
+Orchestrates the pipeline:
 
-**Path:**  
-`scraper/pipeline/run.py`
+```
+fetch → merge history → dedupe → export
+```
 
 ```python
 from __future__ import annotations
@@ -221,7 +218,6 @@ from scraper.storage.csv_store import write_csv
 from scraper.storage.json_store import read_json_if_exists, write_json
 
 def _dict_to_snapshot(d: dict) -> ProductSnapshot:
-    # Pydantic reconstructs the datetime correctly if ISO formatted
     return ProductSnapshot.model_validate(d)
 
 def run_pipeline(
@@ -246,13 +242,10 @@ def run_pipeline(
 
 ---
 
-## 5) `scraper/cli.py` — Add the `run` command
+# 5) `scraper/cli.py`
 
 **Purpose:**  
-Adds a CLI command that runs the full pipeline and stores historical data.
-
-**Path:**  
-`scraper/cli.py`
+Provides user‑friendly entrypoints to run scraping and persistence.
 
 ```python
 from __future__ import annotations
@@ -321,27 +314,30 @@ if __name__ == "__main__":
 
 ---
 
-## 6) Run the pipeline and verify files
+## ▶️ Run the pipeline
 
 ```bash
 uv run python -m scraper.cli run
 ```
 
+After execution, you should see:
+
+```
+data/processed/prices.csv
+data/processed/prices.json
+```
+
 ---
 
-# 🧪 Tests
+# 🧪 Tests introduced
 
-Tests validate price normalization and deduplication to ensure data integrity over time.
+These tests ensure the pipeline can evolve safely.
 
 ---
 
-## 7) `tests/test_normalize.py`
+## `tests/test_normalize.py`
 
-**Purpose:**  
-Ensures European price formats are parsed correctly.
-
-**Path:**  
-`tests/test_normalize.py`
+Validates European price parsing.
 
 ```python
 from scraper.pipeline.normalize import parse_price_eur
@@ -357,11 +353,7 @@ def test_parse_price_eur_no_decimals() -> None:
 
 ## `tests/test_dedupe.py`
 
-**Purpose:**  
-Ensures duplicate snapshots are removed correctly.
-
-**Path:**  
-`tests/test_dedupe.py`
+Validates deduplication logic.
 
 ```python
 from datetime import datetime, timezone
@@ -394,7 +386,6 @@ def test_dedupe_by_key() -> None:
     assert len(out) == 1
 ```
 
----
 
 Run tests:
 
@@ -402,16 +393,18 @@ Run tests:
 uv run pytest -q
 ```
 
-## ✅ What was achieved in Step 3
+---
+
+# ✅ What was achieved in Step 3
 
 By completing this step, the project now:
 
-✔ Scrapes real product data  
-✔ Uses a clean, extensible architecture  
-✔ Maintains historical price data  
-✔ Exports CSV and JSON  
-✔ Includes automated tests  
-✔ Runs with a single reproducible command  
-✔ Is ready for automation, Docker, and reporting  
+- ✔ Scrapes real product data  
+- ✔ Uses a clean, extensible architecture  
+- ✔ Maintains historical information  
+- ✔ Exports CSV and JSON  
+- ✔ Includes automated tests  
+- ✔ Runs with a single command  
+- ✔ Is ready for media caching and reporting  
 
 ---
