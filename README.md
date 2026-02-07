@@ -1,354 +1,418 @@
-# 🟦 Step 3 — Implement the real scraper and persist historical data
+# Step 5 — Generate the HTML Dashboard (Chart.js)
 
-## 🎯 Goal
-
-The goal of this step is to build a real, modular, and reproducible scraper that:
-
-- Scrapes product data from a scraping-safe website  
-  https://andres-torrez.github.io/iphone-catalog/
-- Monitors the following models:
-  - iPhone 15  
-  - iPhone 16  
-  - iPhone 17
-- Extracts structured data:
-  - product title  
-  - model identifier  
-  - price (EUR)  
-  - SKU  
-  - product URL  
-  - direct product image URL
-- Normalizes European price formats
-- Maintains a historical price dataset
-- Exports data to:
-  - JSON (source of truth)
-  - CSV (Excel / Sheets friendly)
-- Includes automated tests to guarantee data quality
-
-At the end of this step, the project transitions from a demo to a production-ready data pipeline.
+This step converts your processed historical dataset into a **clean, static, portfolio‑ready HTML dashboard**.  
+The dashboard is fully offline‑friendly and can be opened directly in a browser.
 
 ---
 
-## ⚙️ Project configuration
+## 🎯 Goal of this step
 
-To support local development, testing, and reproducibility, the following configuration was added to `pyproject.toml`:
+The purpose is to take the price history stored in `prices.json` and generate a visual dashboard that includes:
 
-```toml
-[project.optional-dependencies]
-dev = ["pytest", "ruff"]
+- Current price per iPhone model  
+- Price delta vs previous snapshot  
+- Local cached product images  
+- A timeline chart showing price evolution  
+- A “last updated” timestamp  
+- A self‑contained HTML report inside `reports/`
 
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-packages = ["scraper"]
-```
-
-### Why this configuration?
-
-- Defines explicit development dependencies  
-- Enables editable installs for local development  
-- Ensures the scraper package is correctly discoverable  
-- Improves portability and reuse of the project  
+This is the most visible artifact of the entire project.
 
 ---
 
-## 📦 Installation and execution
+## 📦 What the dashboard includes
 
-```bash
-uv sync
-uv pip install -e .
+### **Header**
+- Title  
+- Subtitle  
+- Last update timestamp (computed from all snapshots)
+
+### **Model cards**
+Each card displays:
+- Local product image  
+- Product title  
+- Current price  
+- Price delta (↑ / ↓ / –)  
+- Link to the product page  
+- Model name  
+
+### **Price history chart**
+- One dataset per model  
+- Shared timeline with unique timestamps  
+- Human‑readable date/time labels  
+- Smooth lines and clean layout  
+
+---
+
+## 🧠 Files added or modified in this step
+
+Below you’ll find **each file involved**, followed by **your original code** and a clear explanation of what it does.
+
+---
+
+# `scraper/report/render.py`
+
+This module is responsible for **loading the processed data, computing deltas, preparing the template context, and generating the final HTML report**.
+
+It performs the following tasks:
+
+- Loads `prices.json`  
+- Groups snapshots by model  
+- Sorts snapshots chronologically  
+- Computes price deltas (current − previous)  
+- Extracts the latest timestamp  
+- Renders the Jinja2 template `index.html.j2`  
+- Copies `styles.css` into the output folder  
+
+### **Code**
+
+```python
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from collections import defaultdict
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+
+def load_prices(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def prepare_context(rows: list[dict]) -> dict:
+    """
+    Context for template:
+    - by_model: model -> snapshots sorted by timestamp
+    - latest: model -> latest snapshot enriched with delta vs previous
+    - last_updated: max timestamp across all rows
+    """
+    by_model: dict[str, list[dict]] = defaultdict(list)
+
+    for r in rows:
+        by_model[r.get("model", "unknown")].append(r)
+
+    for model in by_model:
+        by_model[model].sort(key=lambda x: x.get("timestamp", ""))
+
+    # header "Last update"
+    last_updated = ""
+    if rows:
+        last_updated = max(r.get("timestamp", "") for r in rows)
+
+    # latest per model + delta
+    latest: dict[str, dict] = {}
+    for model, items in by_model.items():
+        if not items:
+            continue
+
+        current = items[-1]
+        prev = items[-2] if len(items) > 1 else None
+
+        delta = None
+        if prev:
+            try:
+                delta = round(float(current["price_eur"]) - float(prev["price_eur"]), 2)
+            except Exception:
+                delta = None
+
+        latest[model] = {**current, "delta": delta}
+
+    return {"by_model": dict(by_model), "latest": latest, "last_updated": last_updated}
+
+
+def render_report(prices_json: Path, out_html: Path, templates_dir: Path) -> None:
+    rows = load_prices(prices_json)
+    ctx = prepare_context(rows)
+
+    env = Environment(
+        loader=FileSystemLoader(str(templates_dir)),
+        autoescape=select_autoescape(["html"]),
+    )
+
+    tpl = env.get_template("index.html.j2")
+    html = tpl.render(**ctx)
+
+    out_html.parent.mkdir(parents=True, exist_ok=True)
+    out_html.write_text(html, encoding="utf-8")
+
+    # Copy CSS next to the HTML output so the report is self-contained
+    css_src = templates_dir / "styles.css"
+    css_dst = out_html.parent / "styles.css"
+    if css_src.exists():
+        css_dst.write_text(css_src.read_text(encoding="utf-8"), encoding="utf-8")
 ```
 
-Run the full pipeline:
+---
 
-```bash
+# `scraper/report/templates/index.html.j2`
+
+This is the **Jinja2 HTML template** used to generate the dashboard.
+
+It defines:
+
+- The page structure (header, cards, chart)  
+- How each model card is rendered  
+- How deltas are displayed  
+- How timestamps and datasets are injected into Chart.js  
+- A fix for Windows paths (`\` → `/`) so images load correctly  
+
+### **Code**
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>iPhone Price Monitor</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header>
+    <h1>📱 iPhone Price Monitor</h1>
+    <p class="subtitle">Historical price tracking dashboard</p>
+    <p class="muted">Last update: <strong>{{ last_updated }}</strong></p>
+  </header>
+
+  {% if not latest %}
+    <p class="muted">
+      No data yet. Run:
+      <code>uv run python -m scraper.cli run</code>
+    </p>
+  {% endif %}
+
+  <section class="cards">
+    {% for model, item in latest.items() %}
+    <a class="card" href="{{ item.product_url }}" target="_blank" rel="noopener">
+      {# Normalize Windows paths (backslashes) into web paths #}
+      <img src="../{{ (item.image_path | replace('\\', '/')) }}" alt="{{ item.title }}" />
+      <h2>{{ item.title }}</h2>
+
+      <p class="price">{{ '%.2f'|format(item.price_eur) }} €</p>
+
+      {% if item.delta is not none %}
+        {% if item.delta > 0 %}
+          <p class="delta up">↑ +{{ '%.2f'|format(item.delta) }} €</p>
+        {% elif item.delta < 0 %}
+          <p class="delta down">↓ {{ '%.2f'|format(item.delta|abs) }} €</p>
+        {% else %}
+          <p class="delta flat">–</p>
+        {% endif %}
+      {% else %}
+        <p class="delta flat">No previous data</p>
+      {% endif %}
+
+      <p class="model">{{ model }}</p>
+    </a>
+    {% endfor %}
+  </section>
+
+  <section class="chart">
+    <div class="chart-head">
+      <h3>Price history</h3>
+      <p class="muted">Track how prices evolve over time.</p>
+    </div>
+
+    <div class="chart-container">
+      <canvas id="priceChart"></canvas>
+    </div>
+  </section>
+
+  <script>
+    // Raw timestamps (unique, ordered)
+    const labelsRaw = [
+      {% for model, rows in by_model.items() %}
+        {% for r in rows %}
+          "{{ r.timestamp }}",
+        {% endfor %}
+      {% endfor %}
+    ];
+    const uniqLabelsRaw = [...new Set(labelsRaw)];
+
+    // Human-readable labels for the X axis
+    const labels = uniqLabelsRaw.map(ts => {
+      const d = new Date(ts);
+      const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+      return `${date} ${time}`;
+    });
+
+    const datasets = [
+      {% for model, rows in by_model.items() %}
+      {
+        label: "{{ model }}",
+        data: uniqLabelsRaw.map(ts => {
+          const found = [
+            {% for r in rows %}
+            { ts: "{{ r.timestamp }}", price: {{ r.price_eur }} },
+            {% endfor %}
+          ].find(x => x.ts === ts);
+          return found ? found.price : null;
+        }),
+        spanGaps: true,
+        tension: 0.35,
+        pointRadius: 3
+      },
+      {% endfor %}
+    ];
+
+    new Chart(document.getElementById("priceChart"), {
+      type: "line",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "top" },
+          tooltip: { mode: "index", intersect: false }
+        },
+        interaction: { mode: "nearest", intersect: false },
+        scales: {
+          x: {
+            ticks: { maxTicksLimit: 5 }
+          },
+          y: {
+            title: { display: true, text: "€" }
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
+```
+
+---
+
+# `scraper/report/templates/styles.css`
+
+This stylesheet defines the **visual design** of the dashboard:
+
+- Layout and spacing  
+- Card design and hover effects  
+- Delta color coding  
+- Chart container height  
+- Light, modern UI  
+
+### **Code**
+
+```css
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial, sans-serif;
+  margin: 32px;
+  background: #f9fafb;
+  color: #111827;
+}
+
+header { margin-bottom: 22px; }
+header h1 { margin: 0 0 6px 0; font-size: 32px; }
+
+.subtitle { margin: 0; color: #6b7280; }
+.muted { color: #6b7280; margin-top: 8px; }
+
+code {
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 18px 0 28px 0;
+}
+
+.card {
+  display: block;
+  background: white;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  text-align: center;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid #eef2f7;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(0,0,0,0.08);
+  border-color: #e5e7eb;
+}
+
+.card img {
+  width: 100%;
+  height: 160px;
+  object-fit: contain;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #eef2f7;
+}
+
+.card h2 { margin: 12px 0 6px 0; font-size: 18px; }
+.price { font-size: 26px; font-weight: 800; margin: 6px 0 0 0; }
+
+.model {
+  margin: 8px 0 0 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.delta { font-weight: 800; margin-top: 6px; }
+.delta.up { color: #16a34a; }
+.delta.down { color: #dc2626; }
+.delta.flat { color: #6b7280; }
+
+/* Chart */
+.chart {
+  background: white;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  border: 1px solid #eef2f7;
+}
+
+.chart-head { margin-bottom: 10px; }
+.chart-head h3 { margin: 0 0 6px 0; font-size: 18px; }
+
+/* Keeps chart shorter & cleaner */
+.chart-container { height: 320px; }
+```
+
+---
+
+## ▶️ Generate the report
+
+Run the pipeline:
+
+```
 uv run python -m scraper.cli run
 ```
 
-Run tests:
-
-```bash
-uv run pytest -q
-```
-
----
-
-## 🧠 Architecture introduced in Step 3
+Then open:
 
 ```
-HTML Source
-   ↓
-Normalization
-   ↓
-Deduplication
-   ↓
-JSON / CSV Storage
+reports/index.html
 ```
 
-Each responsibility is isolated and testable.
 
 ---
 
-## 📂 Files and code (Step 3)
+## 🔧 Troubleshooting
 
----
+If your editor has trouble writing files, you can overwrite them using a heredoc:
 
-### `scraper/models.py`
-
-**Purpose:**  
-Defines the canonical data model used across the entire pipeline.
-
-```python
-from __future__ import annotations
-from datetime import datetime
-from pydantic import BaseModel, Field, HttpUrl
-
-class ProductSnapshot(BaseModel):
-    timestamp: datetime
-    source: str = Field(default="github_pages_catalog")
-    model: str
-    title: str
-    sku: str | None = None
-    currency: str = "EUR"
-    price_eur: float
-    product_url: HttpUrl
-    image_url: HttpUrl
 ```
-
----
-
-### `scraper/http_client.py`
-
-**Purpose:**  
-Centralized HTTP layer for downloading HTML pages.
-
-```python
-from __future__ import annotations
-import httpx
-
-def get_html(url: str, timeout_s: float = 20.0) -> str:
-    headers = {
-        "User-Agent": "iphone-price-monitor/1.0",
-        "Accept": "text/html",
-    }
-    with httpx.Client(headers=headers, timeout=timeout_s) as client:
-        r = client.get(url)
-        r.raise_for_status()
-        return r.text
+cat > scraper/report/render.py <<'EOF'
+# (paste file content here)
+EOF
 ```
-
----
-
-### `scraper/sources/base.py`
-
-**Purpose:**  
-Defines the source adapter contract.
-
-```python
-from abc import ABC, abstractmethod
-from scraper.models import ProductSnapshot
-
-class Source(ABC):
-    @abstractmethod
-    def fetch(self) -> list[ProductSnapshot]:
-        pass
-```
-
----
-
-### `scraper/pipeline/normalize.py`
-
-**Purpose:**  
-Normalizes European price strings into floats.
-
-```python
-def parse_price_eur(text: str) -> float:
-    cleaned = text.replace("€", "").replace("\xa0", "").strip()
-    cleaned = cleaned.replace(".", "").replace(",", ".")
-    return float(cleaned)
-```
-
----
-
-### `scraper/sources/github_pages_catalog.py`
-
-**Purpose:**  
-Implements the real scraper for the GitHub Pages catalog.
-
-```python
-from datetime import datetime, timezone
-from urllib.parse import urljoin
-from selectolax.parser import HTMLParser
-from scraper.http_client import get_html
-from scraper.pipeline.normalize import parse_price_eur
-from scraper.models import ProductSnapshot
-from scraper.sources.base import Source
-
-class GitHubPagesCatalogSource(Source):
-    def __init__(self, base_url: str):
-        self.base_url = base_url if base_url.endswith("/") else base_url + "/"
-
-    def fetch(self) -> list[ProductSnapshot]:
-        paths = ["iphone-15.html", "iphone-16.html", "iphone-17.html"]
-        now = datetime.now(timezone.utc)
-        results = []
-
-        for path in paths:
-            url = urljoin(self.base_url, path)
-            tree = HTMLParser(get_html(url))
-
-            results.append(
-                ProductSnapshot(
-                    timestamp=now,
-                    model=tree.css_first('[data-testid="product-model"]').text(),
-                    title=tree.css_first('[data-testid="product-title"]').text(),
-                    price_eur=parse_price_eur(
-                        tree.css_first('[data-testid="product-price"]').text()
-                    ),
-                    sku=tree.css_first('[data-testid="product-sku"]').text(),
-                    product_url=url,
-                    image_url=urljoin(
-                        self.base_url,
-                        tree.css_first('[data-testid="product-image"]').attributes["src"],
-                    ),
-                )
-            )
-        return results
-```
-
----
-
-### `scraper/pipeline/dedupe.py`
-
-**Purpose:**  
-Removes duplicate snapshots from the historical dataset.
-
-```python
-from scraper.models import ProductSnapshot
-
-def dedupe_snapshots(rows: list[ProductSnapshot]) -> list[ProductSnapshot]:
-    seen = set()
-    output = []
-
-    for r in rows:
-        key = (r.timestamp.isoformat(), r.model, r.price_eur)
-        if key not in seen:
-            seen.add(key)
-            output.append(r)
-
-    return sorted(output, key=lambda x: (x.timestamp, x.model))
-```
-
----
-
-### `scraper/storage/json_store.py`
-
-**Purpose:**  
-JSON persistence layer (source of truth).
-
-```python
-from pathlib import Path
-import json
-
-def read_json_if_exists(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    return json.loads(path.read_text())
-
-def write_json(path: Path, data: list[dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2))
-```
-
----
-
-### `scraper/storage/csv_store.py`
-
-**Purpose:**  
-CSV export for easy inspection and analysis.
-
-```python
-import csv
-from pathlib import Path
-
-def write_csv(path: Path, rows: list[dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
-        writer.writeheader()
-        writer.writerows(rows)
-```
-
----
-
-### `scraper/pipeline/run.py`
-
-**Purpose:**  
-Orchestrates the full scraping pipeline.
-
-```python
-from pathlib import Path
-from scraper.sources.github_pages_catalog import GitHubPagesCatalogSource
-from scraper.pipeline.dedupe import dedupe_snapshots
-from scraper.storage.json_store import read_json_if_exists, write_json
-from scraper.storage.csv_store import write_csv
-
-def run_pipeline(base_url: str, out_json: Path, out_csv: Path):
-    source = GitHubPagesCatalogSource(base_url)
-    new_data = [s.model_dump() for s in source.fetch()]
-    existing = read_json_if_exists(out_json)
-    combined = dedupe_snapshots(existing + new_data)
-
-    write_json(out_json, combined)
-    write_csv(out_csv, combined)
-```
-
----
-
-### `scraper/cli.py`
-
-**Purpose:**  
-Command-line interface for reproducible execution.
-
-```python
-import argparse
-from pathlib import Path
-from scraper.pipeline.run import run_pipeline
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("run", nargs="?")
-    args = parser.parse_args()
-
-    run_pipeline(
-        "https://andres-torrez.github.io/iphone-catalog/",
-        Path("data/processed/prices.json"),
-        Path("data/processed/prices.csv"),
-    )
-
-if __name__ == "__main__":
-    main()
-```
-
----
-
-## 🧪 Tests
-
-Tests validate price normalization and deduplication to ensure data integrity over time.
-
----
-
-## ✅ What was achieved in Step 3
-
-By completing this step, the project now:
-
-✔ Scrapes real product data  
-✔ Uses a clean, extensible architecture  
-✔ Maintains historical price data  
-✔ Exports CSV and JSON  
-✔ Includes automated tests  
-✔ Runs with a single reproducible command  
-✔ Is ready for automation, Docker, and reporting  
 
 ---

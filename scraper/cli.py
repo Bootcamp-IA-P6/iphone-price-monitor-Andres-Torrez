@@ -7,12 +7,14 @@ from datetime import datetime, timezone
 
 from scraper.pipeline.run import run_pipeline
 from scraper.sources.github_pages_catalog import GitHubPagesCatalogSource
+from scraper.report.render import render_report
 
 DEFAULT_BASE_URL = "https://andres-torrez.github.io/iphone-catalog/"
 DEFAULT_CSV = Path("data/processed/prices.csv")
 DEFAULT_JSON = Path("data/processed/prices.json")
 DEFAULT_IMAGES_DIR = Path("assets/images")
-
+DEFAULT_REPORT_HTML = Path("reports/index.html")
+DEFAULT_TEMPLATES_DIR = Path("scraper/report/templates")
 
 
 def cmd_healthcheck() -> None:
@@ -38,7 +40,13 @@ def cmd_run(
         out_json=out_json,
         images_dir=images_dir,
     )
+    render_report(
+    prices_json=out_json,
+    out_html=DEFAULT_REPORT_HTML,
+    templates_dir=DEFAULT_TEMPLATES_DIR,
+)
 
+    print(f"[ok] report generated: {DEFAULT_REPORT_HTML}")
     print(f"[ok] stored snapshots: {len(combined)}")
     print(f"[ok] csv:  {out_csv}")
     print(f"[ok] json: {out_json}")

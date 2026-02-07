@@ -8,6 +8,10 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 
 def load_prices(path: Path) -> list[dict]:
+    """
+    Load the historical dataset from JSON.
+    Returns [] if the file does not exist yet.
+    """
     if not path.exists():
         return []
     return json.loads(path.read_text(encoding="utf-8"))
@@ -15,10 +19,10 @@ def load_prices(path: Path) -> list[dict]:
 
 def prepare_context(rows: list[dict]) -> dict:
     """
-    Context for template:
-    - by_model: model -> snapshots sorted by timestamp
+    Build template context:
+    - by_model: model -> list of snapshots sorted by timestamp
     - latest: model -> latest snapshot enriched with delta vs previous
-    - last_updated: max timestamp across all rows
+    - last_updated: max timestamp across all rows (string)
     """
     by_model: dict[str, list[dict]] = defaultdict(list)
 
@@ -28,12 +32,12 @@ def prepare_context(rows: list[dict]) -> dict:
     for model in by_model:
         by_model[model].sort(key=lambda x: x.get("timestamp", ""))
 
-    # header "Last update"
+    # Last updated (for the header)
     last_updated = ""
     if rows:
         last_updated = max(r.get("timestamp", "") for r in rows)
 
-    # latest per model + delta
+    # Latest per model + delta
     latest: dict[str, dict] = {}
     for model, items in by_model.items():
         if not items:
@@ -54,7 +58,12 @@ def prepare_context(rows: list[dict]) -> dict:
     return {"by_model": dict(by_model), "latest": latest, "last_updated": last_updated}
 
 
+
 def render_report(prices_json: Path, out_html: Path, templates_dir: Path) -> None:
+    """
+    Render reports/index.html from scraper/report/templates/index.html.j2
+    and copy styles.css next to the output HTML.
+    """
     rows = load_prices(prices_json)
     ctx = prepare_context(rows)
 
