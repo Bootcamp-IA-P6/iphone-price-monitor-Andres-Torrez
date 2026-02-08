@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>iPhone Price Monitor</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header>
+    <h1>📱 iPhone Price Monitor</h1>
+    <p class="subtitle">Historical price tracking dashboard</p>
+    <p class="muted">Last update: <strong>{{ last_updated }}</strong></p>
+  </header>
+
+  {% if not latest %}
+    <p class="muted">
+      No data yet. Run:
+      <code>uv run python -m scraper.cli run</code>
+    </p>
+  {% endif %}
+
+  <section class="cards">
+    {% for model, item in latest.items() %}
+    <a class="card" href="{{ item.product_url }}" target="_blank" rel="noopener">
+      {# Normalize Windows paths (backslashes) into web paths #}
+      <img src="../{{ (item.image_path | replace('\\', '/')) }}" alt="{{ item.title }}" />
+      <h2>{{ item.title }}</h2>
+
+      <p class="price">{{ '%.2f'|format(item.price_eur) }} €</p>
+
+      {% if item.delta is not none %}
+        {% if item.delta > 0 %}
+          <p class="delta up">↑ +{{ '%.2f'|format(item.delta) }} €</p>
+        {% elif item.delta < 0 %}
+          <p class="delta down">↓ {{ '%.2f'|format(item.delta|abs) }} €</p>
+        {% else %}
+          <p class="delta flat">–</p>
+        {% endif %}
+      {% else %}
+        <p class="delta flat">No previous data</p>
+      {% endif %}
+
+      <p class="model">{{ model }}</p>
+    </a>
+    {% endfor %}
+  </section>
+
+  <section class="chart">
+    <div class="chart-head">
+      <h3>Price history</h3>
+      <p class="muted">Track how prices evolve over time.</p>
+    </div>
+
+    <div class="chart-container">
+      <canvas id="priceChart"></canvas>
+    </div>
+  </section>
+
+  <script>
+    // Raw timestamps (unique, ordered)
+    const labelsRaw = [
+      {% for model, rows in by_model.items() %}
+        {% for r in rows %}
+          "{{ r.timestamp }}",
+        {% endfor %}
+      {% endfor %}
+    ];
+    const uniqLabelsRaw = [...new Set(labelsRaw)];
+
+    // Human-readable labels for the X axis
+    const labels = uniqLabelsRaw.map(ts => {
+      const d = new Date(ts);
+      const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+      return `${date} ${time}`;
+    });
+
+    const datasets = [
+      {% for model, rows in by_model.items() %}
+      {
+        label: "{{ model }}",
+        data: uniqLabelsRaw.map(ts => {
+          const found = [
+            {% for r in rows %}
+            { ts: "{{ r.timestamp }}", price: {{ r.price_eur }} },
+            {% endfor %}
+          ].find(x => x.ts === ts);
+          return found ? found.price : null;
+        }),
+        spanGaps: true,
+        tension: 0.35,
+        pointRadius: 3
+      },
+      {% endfor %}
+    ];
+
+    new Chart(document.getElementById("priceChart"), {
+      type: "line",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "top" },
+          tooltip: { mode: "index", intersect: false }
+        },
+        interaction: { mode: "nearest", intersect: false },
+        scales: {
+          x: {
+            ticks: { maxTicksLimit: 5 }
+          },
+          y: {
+            title: { display: true, text: "€" }
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>

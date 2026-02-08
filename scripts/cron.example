@@ -1,0 +1,2 @@
+# Run every day at 09:00 (server timezone)
+0 9 * * * /path/to/iphone-price-monitor/scripts/run_pipeline.sh >> /path/to/iphone-price-monitor/data/cron.log 2>&1

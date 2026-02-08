@@ -1,0 +1,124 @@
+body {
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial, sans-serif;
+    margin: 32px;
+    background: #f9fafb;
+    color: #111827;
+}
+
+header {
+    margin-bottom: 22px;
+}
+
+header h1 {
+    margin: 0 0 6px 0;
+    font-size: 32px;
+}
+
+.subtitle {
+    margin: 0;
+    color: #6b7280;
+}
+
+.muted {
+    color: #6b7280;
+    margin-top: 8px;
+}
+
+code {
+    background: #eef2ff;
+    border: 1px solid #e0e7ff;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin: 18px 0 28px 0;
+}
+
+.card {
+    display: block;
+    background: white;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    text-align: center;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #eef2f7;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
+    border-color: #e5e7eb;
+}
+
+.card img {
+    width: 100%;
+    height: 160px;
+    object-fit: contain;
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid #eef2f7;
+}
+
+.card h2 {
+    margin: 12px 0 6px 0;
+    font-size: 18px;
+}
+
+.price {
+    font-size: 26px;
+    font-weight: 800;
+    margin: 6px 0 0 0;
+}
+
+.model {
+    margin: 8px 0 0 0;
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.delta {
+    font-weight: 800;
+    margin-top: 6px;
+}
+
+.delta.up {
+    color: #16a34a;
+}
+
+.delta.down {
+    color: #dc2626;
+}
+
+.delta.flat {
+    color: #6b7280;
+}
+
+/* Chart */
+.chart {
+    background: white;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    border: 1px solid #eef2f7;
+}
+
+.chart-head {
+    margin-bottom: 10px;
+}
+
+.chart-head h3 {
+    margin: 0 0 6px 0;
+    font-size: 18px;
+}
+
+/* Keeps chart shorter & cleaner */
+.chart-container {
+    height: 320px;
+}
