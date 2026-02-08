@@ -66,6 +66,7 @@ while ($true) {
     Write-Host "Sleeping 120 seconds..."
     Start-Sleep -Seconds 120
 }
+```
 
 Run it (VS Code terminal)
 powershell -ExecutionPolicy Bypass -File scripts/dev_loop.ps1
@@ -73,7 +74,7 @@ powershell -ExecutionPolicy Bypass -File scripts/dev_loop.ps1
 
 Stop it anytime with Ctrl + C.
 
-9.2 Remote automation (GitHub Actions)
+8.2 Remote automation (GitHub Actions)
 File: .github/workflows/scheduled.yml
 
 This workflow:
@@ -86,6 +87,7 @@ runs the pipeline
 
 uploads outputs as artifacts
 
+```
 name: scheduled-pipeline
 
 on:
@@ -127,7 +129,7 @@ jobs:
             reports/styles.css
             assets/images
           if-no-files-found: warn
-
+```
 🔎 How to verify it works
 Manual (instant)
 
