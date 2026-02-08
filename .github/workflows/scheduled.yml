@@ -1,0 +1,41 @@
+name: Scheduled Run
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Runs daily at 08:00 UTC
+    - cron: "0 8 * * *"
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: |
+          uv sync
+          uv pip install -e .
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Run pipeline
+        run: uv run python -m scraper.cli run
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-price-monitor-output
+          path: |
+            data/processed/**
+            assets/images/**
+            reports/**
