@@ -32,7 +32,7 @@ For immediate testing on GitHub, use the manual trigger: **Run workflow**.
 
 ---
 
-## 9.1 Local automation (Windows / VS Code)
+## 8.1 Local automation (Windows / VS Code)
 
 ### File: `scripts/dev_loop.ps1`
 
