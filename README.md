@@ -1,22 +1,42 @@
-# Step 5 — Generate the HTML Dashboard (Chart.js)
+# 🟦 5 — Generate the HTML Dashboard (Chart.js) (Issue #6)
 
-This step converts your processed historical dataset into a **clean, static, portfolio‑ready HTML dashboard**.  
-The dashboard is fully offline‑friendly and can be opened directly in a browser.
+## 🎯 Goal
+
+Convert the processed historical dataset into a **clean, static, portfolio‑ready HTML dashboard**.
+
+The report is:
+
+- **offline‑friendly** (uses cached local images)  
+- **static** (no backend required)  
+- **easy to share** (open `reports/index.html` in any browser)
+
+This is the most visible artifact of the entire project.
 
 ---
 
-## 🎯 Goal of this step
+## ✅ Prerequisites
 
-The purpose is to take the price history stored in `prices.json` and generate a visual dashboard that includes:
+Before running this milestone, you should already have:
 
-- Current price per iPhone model  
-- Price delta vs previous snapshot  
-- Local cached product images  
-- A timeline chart showing price evolution  
-- A “last updated” timestamp  
-- A self‑contained HTML report inside `reports/`
+- Historical data in `data/processed/prices.json` (from milestone **3**)  
+- Local images cached in `assets/images/` + `image_path` in the dataset (from milestone **4**)  
 
-This is the most visible artifact of the entire project.
+---
+
+## ⚙️ Expected output
+
+After running the pipeline, you should have:
+
+- `reports/index.html`  
+- `reports/styles.css` (copied next to the HTML for a self‑contained report)
+
+And the dashboard should display:
+
+- current price per model  
+- delta vs previous snapshot  
+- local product images  
+- a price history chart (Chart.js)  
+- last updated timestamp  
 
 ---
 
@@ -25,46 +45,39 @@ This is the most visible artifact of the entire project.
 ### **Header**
 - Title  
 - Subtitle  
-- Last update timestamp (computed from all snapshots)
+- “Last updated” timestamp (computed from snapshots)
 
 ### **Model cards**
 Each card displays:
-- Local product image  
-- Product title  
-- Current price  
-- Price delta (↑ / ↓ / –)  
-- Link to the product page  
-- Model name  
+
+- local cached product image  
+- product title  
+- current price  
+- delta (↑ / ↓ / –)  
+- link to product page  
+- model identifier  
 
 ### **Price history chart**
-- One dataset per model  
-- Shared timeline with unique timestamps  
-- Human‑readable date/time labels  
-- Smooth lines and clean layout  
+- one dataset per model  
+- shared timeline with unique timestamps  
+- human‑readable axis labels  
+- smooth, clean chart layout  
 
 ---
 
-## 🧠 Files added or modified in this step
+## 📂 Files added or modified in this milestone
 
-Below you’ll find **each file involved**, followed by **your original code** and a clear explanation of what it does.
+### `scraper/report/render.py`
 
----
+**Responsibility:**
 
-# `scraper/report/render.py`
-
-This module is responsible for **loading the processed data, computing deltas, preparing the template context, and generating the final HTML report**.
-
-It performs the following tasks:
-
-- Loads `prices.json`  
-- Groups snapshots by model  
-- Sorts snapshots chronologically  
-- Computes price deltas (current − previous)  
-- Extracts the latest timestamp  
-- Renders the Jinja2 template `index.html.j2`  
-- Copies `styles.css` into the output folder  
-
-### **Code**
+- load `prices.json`  
+- group snapshots by model  
+- sort snapshots chronologically  
+- compute deltas (current − previous)  
+- compute the latest timestamp (“Last updated”)  
+- render the Jinja2 template into `reports/index.html`  
+- copy `styles.css` into `reports/`  
 
 ```python
 from __future__ import annotations
@@ -147,19 +160,15 @@ def render_report(prices_json: Path, out_html: Path, templates_dir: Path) -> Non
 
 ---
 
-# `scraper/report/templates/index.html.j2`
+### `scraper/report/templates/index.html.j2`
 
-This is the **Jinja2 HTML template** used to generate the dashboard.
+**Responsibility:**
 
-It defines:
-
-- The page structure (header, cards, chart)  
-- How each model card is rendered  
-- How deltas are displayed  
-- How timestamps and datasets are injected into Chart.js  
-- A fix for Windows paths (`\` → `/`) so images load correctly  
-
-### **Code**
+- defines the HTML structure (header, cards, chart)  
+- renders cards per model  
+- shows deltas with up/down/flat indicators  
+- injects datasets into Chart.js  
+- includes a Windows path normalization fix (`\` → `/`) so cached images load correctly  
 
 ```html
 <!doctype html>
@@ -286,19 +295,18 @@ It defines:
 </html>
 ```
 
+
 ---
 
-# `scraper/report/templates/styles.css`
+### `scraper/report/templates/styles.css`
 
-This stylesheet defines the **visual design** of the dashboard:
+**Responsibility:**
 
-- Layout and spacing  
-- Card design and hover effects  
-- Delta color coding  
-- Chart container height  
-- Light, modern UI  
-
-### **Code**
+- visual layout (grid cards)  
+- hover effects  
+- delta colors  
+- chart sizing and spacing  
+- modern light UI  
 
 ```css
 body {
@@ -390,29 +398,85 @@ code {
 
 ## ▶️ Generate the report
 
-Run the pipeline:
+Run the full pipeline:
 
-```
+```bash
 uv run python -m scraper.cli run
 ```
 
-Then open:
+Open:
 
 ```
 reports/index.html
 ```
 
+---
+
+## 🧪 Quick verification checklist
+
+After running:
+
+- ✅ `reports/index.html` exists  
+- ✅ `reports/styles.css` exists  
+- ✅ cards display images from `assets/images/`  
+- ✅ chart renders and shows history lines  
+- ✅ “Last update” is populated  
 
 ---
 
 ## 🔧 Troubleshooting
 
-If your editor has trouble writing files, you can overwrite them using a heredoc:
+### 1) Images not loading (Windows paths)
+
+If images fail to load on Windows, ensure your template uses:
 
 ```
+{{ (item.image_path | replace('\\', '/')) }}
+```
+
+This converts Windows backslashes into web‑friendly paths.
+
+---
+
+### 2) Report shows “No data yet”
+
+This means `data/processed/prices.json` is empty or missing.
+
+Run:
+
+```bash
+uv run python -m scraper.cli run
+```
+
+Then confirm the JSON file contains snapshots.
+
+---
+
+### 3) Editor / file write issues (fallback)
+
+If your editor fails to save file contents correctly, you can overwrite files using a heredoc:
+
+```bash
 cat > scraper/report/render.py <<'EOF'
-# (paste file content here)
+# paste file content here
 EOF
 ```
 
+This is a last‑resort workaround used during development.
+
 ---
+
+## ✅ What was achieved
+
+By completing this milestone, the project now:
+
+- ✔ generates a static HTML dashboard  
+- ✔ displays current prices + price deltas  
+- ✔ renders a price timeline chart (Chart.js)  
+- ✔ uses cached local images (`image_path`)  
+- ✔ produces a self‑contained report under `reports/`  
+
+---
+
+If quieres, puedo ayudarte a unir todos los pasos en un README final impecable y cohesivo.
+
