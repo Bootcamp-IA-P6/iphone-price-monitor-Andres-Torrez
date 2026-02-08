@@ -1,418 +1,205 @@
-# Step 5 — Generate the HTML Dashboard (Chart.js)
+# 🟦6 — Add Automated Tests for Normalization and Deduplication (Issue #7)
 
-This step converts your processed historical dataset into a **clean, static, portfolio‑ready HTML dashboard**.  
-The dashboard is fully offline‑friendly and can be opened directly in a browser.
+## 🎯 Goal
 
----
+Now that the pipeline can:
 
-## 🎯 Goal of this step
+- scrape  
+- normalize  
+- merge with history  
+- deduplicate  
+- store  
+- cache images  
+- generate reports  
 
-The purpose is to take the price history stored in `prices.json` and generate a visual dashboard that includes:
+…it’s time to ensure future changes **do not silently break data integrity**.
 
-- Current price per iPhone model  
-- Price delta vs previous snapshot  
-- Local cached product images  
-- A timeline chart showing price evolution  
-- A “last updated” timestamp  
-- A self‑contained HTML report inside `reports/`
+This milestone introduces automated validation using `pytest`.
 
-This is the most visible artifact of the entire project.
+We focus on the two most critical transformations:
 
----
+1. Price normalization  
+2. Snapshot deduplication  
 
-## 📦 What the dashboard includes
-
-### **Header**
-- Title  
-- Subtitle  
-- Last update timestamp (computed from all snapshots)
-
-### **Model cards**
-Each card displays:
-- Local product image  
-- Product title  
-- Current price  
-- Price delta (↑ / ↓ / –)  
-- Link to the product page  
-- Model name  
-
-### **Price history chart**
-- One dataset per model  
-- Shared timeline with unique timestamps  
-- Human‑readable date/time labels  
-- Smooth lines and clean layout  
+If either of these breaks → historical data becomes unreliable.
 
 ---
 
-## 🧠 Files added or modified in this step
+## 🧠 Why tests at this stage?
 
-Below you’ll find **each file involved**, followed by **your original code** and a clear explanation of what it does.
+**Before:**  
+We trusted the logic manually.
+
+**After:**  
+The system verifies itself every time the test suite or CI runs.
+
+This enables:
+
+- safe refactoring  
+- confident feature additions  
+- easier collaboration  
+- a professional engineering workflow  
 
 ---
 
-# `scraper/report/render.py`
+## 📂 Files added in this milestone
 
-This module is responsible for **loading the processed data, computing deltas, preparing the template context, and generating the final HTML report**.
+```
+tests/
+├── test_normalize.py
+└── test_dedupe.py
+```
 
-It performs the following tasks:
+No production code is modified.
 
-- Loads `prices.json`  
-- Groups snapshots by model  
-- Sorts snapshots chronologically  
-- Computes price deltas (current − previous)  
-- Extracts the latest timestamp  
-- Renders the Jinja2 template `index.html.j2`  
-- Copies `styles.css` into the output folder  
+---
 
-### **Code**
+# 7.1 — Test price normalization
+
+## What we verify
+
+European price formats must be converted into deterministic floats.
+
+Examples:
+
+| Input           | Output   |
+|----------------|----------|
+| `799,00 €`     | `799.0`  |
+| `999 €`        | `999.0`  |
+| `1.099,99 €`   | `1099.99`|
+| NBSP values    | parsed correctly |
+| invalid values | raise error |
+
+---
+
+## `tests/test_normalize.py`
 
 ```python
-from __future__ import annotations
-
-import json
-from pathlib import Path
-from collections import defaultdict
-
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from scraper.pipeline.normalize import parse_price_eur
 
 
-def load_prices(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    return json.loads(path.read_text(encoding="utf-8"))
+def test_parse_price_eur_comma_decimals() -> None:
+    assert parse_price_eur("799,00 €") == 799.00
 
 
-def prepare_context(rows: list[dict]) -> dict:
-    """
-    Context for template:
-    - by_model: model -> snapshots sorted by timestamp
-    - latest: model -> latest snapshot enriched with delta vs previous
-    - last_updated: max timestamp across all rows
-    """
-    by_model: dict[str, list[dict]] = defaultdict(list)
-
-    for r in rows:
-        by_model[r.get("model", "unknown")].append(r)
-
-    for model in by_model:
-        by_model[model].sort(key=lambda x: x.get("timestamp", ""))
-
-    # header "Last update"
-    last_updated = ""
-    if rows:
-        last_updated = max(r.get("timestamp", "") for r in rows)
-
-    # latest per model + delta
-    latest: dict[str, dict] = {}
-    for model, items in by_model.items():
-        if not items:
-            continue
-
-        current = items[-1]
-        prev = items[-2] if len(items) > 1 else None
-
-        delta = None
-        if prev:
-            try:
-                delta = round(float(current["price_eur"]) - float(prev["price_eur"]), 2)
-            except Exception:
-                delta = None
-
-        latest[model] = {**current, "delta": delta}
-
-    return {"by_model": dict(by_model), "latest": latest, "last_updated": last_updated}
+def test_parse_price_eur_no_decimals() -> None:
+    assert parse_price_eur("999 €") == 999.0
 
 
-def render_report(prices_json: Path, out_html: Path, templates_dir: Path) -> None:
-    rows = load_prices(prices_json)
-    ctx = prepare_context(rows)
+def test_parse_price_eur_thousands_separator() -> None:
+    assert parse_price_eur("1.099,99 €") == 1099.99
 
-    env = Environment(
-        loader=FileSystemLoader(str(templates_dir)),
-        autoescape=select_autoescape(["html"]),
+
+def test_parse_price_eur_nbsp() -> None:
+    assert parse_price_eur("799,00\xa0€") == 799.00
+
+
+def test_parse_price_eur_invalid() -> None:
+    try:
+        parse_price_eur("free")
+        raise AssertionError("Expected ValueError")
+    except ValueError:
+        pass
+```
+
+---
+
+# 7.2 — Test snapshot deduplication
+
+## What we verify
+
+The deduplication layer must:
+
+- remove exact duplicates  
+- keep rows when the price changes  
+- return a stable ordering  
+
+If this logic breaks, historical analytics become corrupted.
+
+---
+
+## `tests/test_dedupe.py`
+
+```python
+from datetime import datetime, timezone
+
+from scraper.models import ProductSnapshot
+from scraper.pipeline.dedupe import dedupe_snapshots
+
+
+def _snap(ts: datetime, model: str, price: float) -> ProductSnapshot:
+    return ProductSnapshot(
+        timestamp=ts,
+        model=model,
+        title=f"{model}",
+        sku="X",
+        price_eur=price,
+        product_url="https://example.com/a",
+        image_url="https://example.com/a.png",
     )
 
-    tpl = env.get_template("index.html.j2")
-    html = tpl.render(**ctx)
 
-    out_html.parent.mkdir(parents=True, exist_ok=True)
-    out_html.write_text(html, encoding="utf-8")
+def test_dedupe_removes_exact_duplicates() -> None:
+    ts = datetime(2026, 2, 5, tzinfo=timezone.utc)
+    a = _snap(ts, "iphone_15", 799.0)
+    b = _snap(ts, "iphone_15", 799.0)
+    out = dedupe_snapshots([a, b])
+    assert len(out) == 1
 
-    # Copy CSS next to the HTML output so the report is self-contained
-    css_src = templates_dir / "styles.css"
-    css_dst = out_html.parent / "styles.css"
-    if css_src.exists():
-        css_dst.write_text(css_src.read_text(encoding="utf-8"), encoding="utf-8")
+
+def test_dedupe_keeps_price_changes() -> None:
+    ts = datetime(2026, 2, 5, tzinfo=timezone.utc)
+    a = _snap(ts, "iphone_15", 799.0)
+    b = _snap(ts, "iphone_15", 749.0)
+    out = dedupe_snapshots([a, b])
+    assert len(out) == 2
+
+
+def test_dedupe_is_stably_sorted() -> None:
+    ts1 = datetime(2026, 2, 5, tzinfo=timezone.utc)
+    ts2 = datetime(2026, 2, 6, tzinfo=timezone.utc)
+
+    rows = [
+        _snap(ts2, "iphone_16", 999.0),
+        _snap(ts1, "iphone_17", 1099.0),
+        _snap(ts1, "iphone_15", 799.0),
+    ]
+    out = dedupe_snapshots(rows)
+
+    assert [r.model for r in out] == ["iphone_15", "iphone_17", "iphone_16"]
 ```
 
 ---
 
-# `scraper/report/templates/index.html.j2`
+## ▶️ Run the tests
 
-This is the **Jinja2 HTML template** used to generate the dashboard.
+```bash
+uv run pytest -q
+```
 
-It defines:
+Expected result:
 
-- The page structure (header, cards, chart)  
-- How each model card is rendered  
-- How deltas are displayed  
-- How timestamps and datasets are injected into Chart.js  
-- A fix for Windows paths (`\` → `/`) so images load correctly  
-
-### **Code**
-
-```html
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>iPhone Price Monitor</title>
-  <link rel="stylesheet" href="./styles.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body>
-  <header>
-    <h1>📱 iPhone Price Monitor</h1>
-    <p class="subtitle">Historical price tracking dashboard</p>
-    <p class="muted">Last update: <strong>{{ last_updated }}</strong></p>
-  </header>
-
-  {% if not latest %}
-    <p class="muted">
-      No data yet. Run:
-      <code>uv run python -m scraper.cli run</code>
-    </p>
-  {% endif %}
-
-  <section class="cards">
-    {% for model, item in latest.items() %}
-    <a class="card" href="{{ item.product_url }}" target="_blank" rel="noopener">
-      {# Normalize Windows paths (backslashes) into web paths #}
-      <img src="../{{ (item.image_path | replace('\\', '/')) }}" alt="{{ item.title }}" />
-      <h2>{{ item.title }}</h2>
-
-      <p class="price">{{ '%.2f'|format(item.price_eur) }} €</p>
-
-      {% if item.delta is not none %}
-        {% if item.delta > 0 %}
-          <p class="delta up">↑ +{{ '%.2f'|format(item.delta) }} €</p>
-        {% elif item.delta < 0 %}
-          <p class="delta down">↓ {{ '%.2f'|format(item.delta|abs) }} €</p>
-        {% else %}
-          <p class="delta flat">–</p>
-        {% endif %}
-      {% else %}
-        <p class="delta flat">No previous data</p>
-      {% endif %}
-
-      <p class="model">{{ model }}</p>
-    </a>
-    {% endfor %}
-  </section>
-
-  <section class="chart">
-    <div class="chart-head">
-      <h3>Price history</h3>
-      <p class="muted">Track how prices evolve over time.</p>
-    </div>
-
-    <div class="chart-container">
-      <canvas id="priceChart"></canvas>
-    </div>
-  </section>
-
-  <script>
-    // Raw timestamps (unique, ordered)
-    const labelsRaw = [
-      {% for model, rows in by_model.items() %}
-        {% for r in rows %}
-          "{{ r.timestamp }}",
-        {% endfor %}
-      {% endfor %}
-    ];
-    const uniqLabelsRaw = [...new Set(labelsRaw)];
-
-    // Human-readable labels for the X axis
-    const labels = uniqLabelsRaw.map(ts => {
-      const d = new Date(ts);
-      const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-      const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-      return `${date} ${time}`;
-    });
-
-    const datasets = [
-      {% for model, rows in by_model.items() %}
-      {
-        label: "{{ model }}",
-        data: uniqLabelsRaw.map(ts => {
-          const found = [
-            {% for r in rows %}
-            { ts: "{{ r.timestamp }}", price: {{ r.price_eur }} },
-            {% endfor %}
-          ].find(x => x.ts === ts);
-          return found ? found.price : null;
-        }),
-        spanGaps: true,
-        tension: 0.35,
-        pointRadius: 3
-      },
-      {% endfor %}
-    ];
-
-    new Chart(document.getElementById("priceChart"), {
-      type: "line",
-      data: { labels, datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: "top" },
-          tooltip: { mode: "index", intersect: false }
-        },
-        interaction: { mode: "nearest", intersect: false },
-        scales: {
-          x: {
-            ticks: { maxTicksLimit: 5 }
-          },
-          y: {
-            title: { display: true, text: "€" }
-          }
-        }
-      }
-    });
-  </script>
-</body>
-</html>
+```
+✓ all tests passed
 ```
 
 ---
 
-# `scraper/report/templates/styles.css`
+## 🧪 When should tests be executed?
 
-This stylesheet defines the **visual design** of the dashboard:
-
-- Layout and spacing  
-- Card design and hover effects  
-- Delta color coding  
-- Chart container height  
-- Light, modern UI  
-
-### **Code**
-
-```css
-body {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial, sans-serif;
-  margin: 32px;
-  background: #f9fafb;
-  color: #111827;
-}
-
-header { margin-bottom: 22px; }
-header h1 { margin: 0 0 6px 0; font-size: 32px; }
-
-.subtitle { margin: 0; color: #6b7280; }
-.muted { color: #6b7280; margin-top: 8px; }
-
-code {
-  background: #eef2ff;
-  border: 1px solid #e0e7ff;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-  margin: 18px 0 28px 0;
-}
-
-.card {
-  display: block;
-  background: white;
-  border-radius: 14px;
-  padding: 16px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-  text-align: center;
-  text-decoration: none;
-  color: inherit;
-  border: 1px solid #eef2f7;
-  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
-}
-
-.card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 22px rgba(0,0,0,0.08);
-  border-color: #e5e7eb;
-}
-
-.card img {
-  width: 100%;
-  height: 160px;
-  object-fit: contain;
-  background: #f8fafc;
-  border-radius: 12px;
-  border: 1px solid #eef2f7;
-}
-
-.card h2 { margin: 12px 0 6px 0; font-size: 18px; }
-.price { font-size: 26px; font-weight: 800; margin: 6px 0 0 0; }
-
-.model {
-  margin: 8px 0 0 0;
-  color: #6b7280;
-  font-size: 13px;
-}
-
-.delta { font-weight: 800; margin-top: 6px; }
-.delta.up { color: #16a34a; }
-.delta.down { color: #dc2626; }
-.delta.flat { color: #6b7280; }
-
-/* Chart */
-.chart {
-  background: white;
-  border-radius: 14px;
-  padding: 16px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-  border: 1px solid #eef2f7;
-}
-
-.chart-head { margin-bottom: 10px; }
-.chart-head h3 { margin: 0 0 6px 0; font-size: 18px; }
-
-/* Keeps chart shorter & cleaner */
-.chart-container { height: 320px; }
-```
+- before pushing  
+- inside CI  
+- after refactoring  
+- when adding new sources  
 
 ---
 
-## ▶️ Generate the report
+## ✅ What we achieved
 
-Run the pipeline:
+By completing this milestone:
 
-```
-uv run python -m scraper.cli run
-```
-
-Then open:
-
-```
-reports/index.html
-```
-
-
----
-
-## 🔧 Troubleshooting
-
-If your editor has trouble writing files, you can overwrite them using a heredoc:
-
-```
-cat > scraper/report/render.py <<'EOF'
-# (paste file content here)
-EOF
-```
-
----
+- ✔ critical transformations are validated  
+- ✔ regressions are detected early  
+- ✔ refactoring becomes safer  
+- ✔ contributors understand expected behavior  
+- ✔ the project moves closer to production standards  
