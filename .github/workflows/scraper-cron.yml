@@ -1,0 +1,33 @@
+name: Scheduled price monitor
+
+on:
+  schedule:
+    # every 5 minutes (GitHub minimum)
+    - cron: "*/5 * * * *"
+
+  workflow_dispatch:  # allows manual run from GitHub UI
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run scraper pipeline
+        run: uv run python -m scraper.cli run
+
+      - name: Commit updated data
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add data/ assets/ reports/
+          git commit -m "chore(auto): scheduled price update" || echo "No changes"
+          git push
