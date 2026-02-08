@@ -149,5 +149,3 @@ Note: schedule runs only from the default branch (main).
 ✔ Reproducible outputs downloadable as artifacts
 
 ✔ Professional automation workflow without auto-committing generated files
-
----
