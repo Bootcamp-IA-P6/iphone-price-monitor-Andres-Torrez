@@ -3,7 +3,8 @@ name: Scheduled price monitor
 on:
   schedule:
     # every 5 minutes (GitHub minimum)
-    - cron: "*/5 * * * *"
+   #check_run:
+     # - cron: "*/5 * * * *"
 
   workflow_dispatch:  # allows manual run from GitHub UI
 
